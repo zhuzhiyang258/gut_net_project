@@ -2,7 +2,7 @@
 
 ## 项目概述
 
-本项目旨在构建一个综合性的肠道菌群数据集，并利用机器学习技术来分析肠道菌群的组成及其对人类健康的潜在影响。我们的目标是开发一个预测模型，用于评估肠道菌群的丰度以及其平衡状态对特定疾病的影响。
+本项目旨在构建一个综合性的肠道菌群数据集，并利用机器学习技术来分析肠道菌群的组成及其对人类健康的潜在影响。我们的目标是开发一个预测模型，用于评估肠道菌群的丰度以及其平衡状态对特定疾病性状的影响。
 
 ## 项目结构
 
@@ -60,7 +60,7 @@ gut_net_project/
 
 1. 克隆仓库：
    ```
-   git clone https://github.com/your-username/gut_net_project.git
+   git clone https://github.com/zhuzhiyang258/gut_net_project.git
    cd gut_net_project
    ```
 
@@ -106,6 +106,6 @@ gut_net_project/
 
 ## 联系方式
 
-项目维护者：Your Name - your.email@example.com
+项目维护者：ZhiyangZhu - zhuzhiyang258@163.com
 
-项目链接：[https://github.com/your-username/gut_net_project](https://github.com/your-username/gut_net_project)
+项目链接：[https://github.com/zhuzhiyang258/gut_net_project](https://github.com/zhuzhiyang258/gut_net_project)
