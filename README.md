@@ -16,7 +16,7 @@
 6. 预测与应用
 
 ## 目录结构
-
+```
 gut_net_project/
 │
 ├── data/ # 数据存储
@@ -52,6 +52,7 @@ gut_net_project/
 ├── requirements.txt # 项目依赖
 ├── README.md # 项目说明
 └── .gitignore # Git忽略文件
+```
 
 
 
