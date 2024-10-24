@@ -25,7 +25,7 @@ gut_net_project/
 │
 ├── src/ # 源代码
 │ ├── data_collection/ # 数据采集
-│ │ └── web_scraper.py
+│ │ └── api_from_GMrepo.py
 │ ├── data_processing/ # 数据处理
 │ │ ├── data_cleaner.py
 │ │ └── dataset_builder.py
@@ -69,7 +69,7 @@ gut_net_project/
    pip install -r requirements.txt
    ```
 
-3. 运行数据采集脚本：
+3. 运行数据采集脚本(可以直接download已经下载和处理好的数据集，不需要再运行)：
    ```
    python src/data_collection/web_scraper.py
    ```
