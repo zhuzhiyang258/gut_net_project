@@ -21,7 +21,9 @@ gut_net_project/
 │
 ├── data/ # 数据存储
 │ ├── raw/ # 原始数据
-│ └── processed/ # 处理后的数据
+│ └── processed/ # 初步处理后的数据
+│ └── cleared/ # 清理后的中间数据
+│ └── standardized/ # 标准化后的最终数据
 │
 ├── src/ # 源代码
 │ ├── data_collection/ # 数据采集
@@ -29,6 +31,7 @@ gut_net_project/
 │ ├── data_processing/ # 数据处理
 │ │ ├── data_cleaner.py
 │ │ └── dataset_builder.py
+│ │ └── process_genus_abundance.py
 │ ├── analysis/ # 数据分析
 │ │ └── data_visualization.py
 │ ├── modeling/ # 模型开发
