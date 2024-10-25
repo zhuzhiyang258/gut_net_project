@@ -1,0 +1,9 @@
+# Ignore all contents of data/cleared, data/processed, and data/raw
+/data/cleared/*
+/data/processed/*
+/data/raw/*
+
+# Optionally, add these to keep the directories but ignore their contents
+!/data/cleared/.gitkeep
+!/data/processed/.gitkeep
+!/data/raw/.gitkeep
