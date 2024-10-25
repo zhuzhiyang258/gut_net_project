@@ -1,3 +1,3 @@
-loaded_uid,sex,host_age,country,BMI,Eubacterium,Blautia,Bacteroides,Dorea,Faecalibacterium,Roseburia,Parabacteroides,Alistipes,Bifidobacterium,label
-24121.0,Female,49.0,New Zealand,,0.273282,0.798497,11.7682,0.0427004,1.15718,0.0427004,1.48597,3.33063,1.23404,lrritable_Bowel_Syndrome_combined
-24122.0,,,New Zealand,,0.580098,6.84643,18.6906,0.191241,0.97533,0.0956206,0.490852,0.905208,3.92682,lrritable_Bowel_Syndrome_combined
+version https://git-lfs.github.com/spec/v1
+oid sha256:594b3d3e46e2a561d98567607c297351eebe34cf61973cdb1661479de5aaa774
+size 432
