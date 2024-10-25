@@ -74,12 +74,13 @@ gut_net_project/
 
 3. 运行数据采集脚本(可以直接download已经下载和处理好的数据集，不需要再运行)：
    ```
-   python src/data_collection/web_scraper.py
+   python src/data_collection/api_from_GMrepo.py
    ```
 
 4. 执行数据处理：
    ```
    python src/data_processing/data_cleaner.py
+   python src/data_processing/process_genus_abundance.py
    python src/data_processing/dataset_builder.py
    ```
 
