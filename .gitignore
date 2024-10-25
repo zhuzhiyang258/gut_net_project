@@ -1,1 +1,3 @@
-**/raw/**/raw_data/
+**/raw/**/raw_data
+**/data/processed/*
+**/data/cleared/*
