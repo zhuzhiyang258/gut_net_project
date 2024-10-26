@@ -24,7 +24,7 @@ class GUTNetTrainer:
         print(f"Using device: {self.device}")
         self.model = GUTNetForSequenceClassification(config).to(self.device)
         # Prepare datasets using preprocess_data
-        data_processor = preprocess_data(root_data_path=data_path, batch_size=batch_size,dataset_type='standard')
+        data_processor = preprocess_data(root_data_path=data_path, batch_size=batch_size)
         self.train_loader, self.val_loader, self.test_loader = data_processor.get_dataloader()
         
         # Add this debugging code
@@ -36,7 +36,7 @@ class GUTNetTrainer:
                 break
         
         # Optimizer
-        self.optimizer = AdamW(self.model.parameters(), lr=8e-4)
+        self.optimizer = AdamW(self.model.parameters(), lr=1e-3)
         # Loss function
         self.criterion = CrossEntropyLoss()
 
@@ -116,12 +116,12 @@ if __name__ == "__main__":
     input_dim = 11  # This is correct as your input shape is [128, 11]
     num_classes = 5  # This is correct, keep it as 5
     hidden_size = 256
-    num_hidden_layers = 6
+    num_hidden_layers = 8
     num_attention_heads = 4
     intermediate_size = 512
     hidden_dropout_prob = 0.2
     attention_probs_dropout_prob = 0.1
-    batch_size = 128
+    batch_size = 256
     network_type = 'without_attention'
 
 
