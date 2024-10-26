@@ -1,4 +1,4 @@
-from transformers.models.bert import BertModel, BertConfig
+from transformers.models.bert import BertModel, BertConfig,BertForMultipleChoice
 import torch
 
 
