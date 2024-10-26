@@ -3,6 +3,7 @@ import json
 import logging
 import requests
 import pandas as pd
+import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # 设置日志记录
@@ -46,9 +47,10 @@ def get_taxonomic_profile(run_id, disease):
         logger.error(f"Failed to download taxonomic profile for {run_id}: {str(e)}")
         return False
 
-def process_disease(disease):
-    # 修改文件路径以匹配新的项目结构
-    file_path = f'data/raw/{disease}/{disease}.txt'
+def process_disease(disease_path):
+    disease = os.path.basename(disease_path)
+    file_path = os.path.join(disease_path, f'{disease}.txt')
+    
     try:
         run_ids = read_project_ids(file_path)
     except Exception as e:
@@ -75,20 +77,27 @@ def process_disease(disease):
     logger.info(f"{disease}: Failed to download taxonomic profiles for {failed_downloads} runs")
     return successful_downloads, failed_downloads
 
-def main():
-    # 修改获取疾病文件夹的路径
-    diseases = [d for d in os.listdir("data/raw") if os.path.isdir(os.path.join("data/raw", d))]
+def main(target_disease=None):
+    base_path = "data/raw"
+    if target_disease:
+        disease_path = os.path.join(base_path, target_disease)
+        if not os.path.isdir(disease_path):
+            logger.error(f"The specified disease directory {disease_path} does not exist.")
+            return
+        successful, failed = process_disease(disease_path)
+    else:
+        logger.error("Please specify a disease directory.")
+        return
     
-    total_successful = 0
-    total_failed = 0
-    
-    for disease in diseases:
-        successful, failed = process_disease(disease)
-        total_successful += successful
-        total_failed += failed
-    
-    logger.info(f"Total: Successfully downloaded taxonomic profiles for {total_successful} runs")
-    logger.info(f"Total: Failed to download taxonomic profiles for {total_failed} runs")
+    logger.info(f"Total: Successfully downloaded taxonomic profiles for {successful} runs")
+    logger.info(f"Total: Failed to download taxonomic profiles for {failed} runs")
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Download taxonomic profiles from GMrepo for a specific disease.")
+    parser.add_argument("disease", type=str, help="Specify the disease directory under 'data/raw' to process")
+    args = parser.parse_args()
+    
+    # Sanitize the disease name to create a valid directory name
+    safe_disease_name = ''.join(c for c in args.disease if c.isalnum() or c in ('-', '_', '&'))
+    
+    main(safe_disease_name)
