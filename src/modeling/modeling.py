@@ -6,8 +6,6 @@ from typing import Optional, Tuple
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 import logging
 
-RANDOM_SEED = 42
-
 class GUTNetConfig:
     def __init__(self, **kwargs):
         self.input_dim = kwargs.get('input_dim', 1)
@@ -23,32 +21,16 @@ class GUTNetConfig:
         self.problem_type = kwargs.get('problem_type', None)
         self.log_level = kwargs.get('log_level', "INFO")
         self.classifier_dropout = kwargs.get('classifier_dropout', None)
-        self.network_type = kwargs.get('network_type', 'without_attention')
-        self.seq_len = kwargs.get('seq_len', 128)
 
 class GUTNetEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.config = config
-        if config.network_type == 'with_attention':
-            torch.manual_seed(RANDOM_SEED)
-            self.variable_embeddings = nn.Embedding(config.seq_len, config.hidden_size)
         self.value_embeddings = nn.Linear(config.input_dim, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, x):
-        if self.config.network_type == 'with_attention':
-            # [batch_size, seq_len] -> [batch_size, seq_len, hidden_size]
-            batch_size, seq_len = x.shape
-            feature_indices = torch.arange(seq_len).unsqueeze(0).expand(batch_size, -1).to(x.device)
-            embedded_features = self.variable_embeddings(feature_indices)
-            value_embeddings = self.value_embeddings(x.unsqueeze(-1))
-            embeddings = embedded_features * value_embeddings
-        else:
-            # Original behavior for 'without_attention'
-            embeddings = self.value_embeddings(x)
-        
+        embeddings = self.value_embeddings(x)
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
         return embeddings
@@ -69,23 +51,33 @@ class GUTNetSelfAttention(nn.Module):
     def transpose_for_scores(self, x):
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
         x = x.view(*new_x_shape)
-        return x.permute(0, 2, 1, 3)
+        if len(x.shape) == 3:
+            return x.permute(1, 0, 2)  # 对于 3D 输入 即直接以变量的值为输入时的做法 此时attention不起作用，
+        elif len(x.shape) == 4:
+            return x.permute(0, 2, 1, 3)  # 对于 4D 输入 将变量嵌入后作为输入
+        else:
+            raise ValueError(f"Unexpected input shape: {x.shape}")
 
     def forward(self, hidden_states):
+        print(f"Hidden states shape in self-attention: {hidden_states.shape}")  # 添加这行用于调试
         query_layer = self.transpose_for_scores(self.query(hidden_states))
         key_layer = self.transpose_for_scores(self.key(hidden_states))
         value_layer = self.transpose_for_scores(self.value(hidden_states))
 
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
+
         attention_probs = nn.Softmax(dim=-1)(attention_scores)
         attention_probs = self.dropout(attention_probs)
 
         context_layer = torch.matmul(attention_probs, value_layer)
-        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
+        if len(context_layer.shape) == 3:
+            context_layer = context_layer.permute(1, 0, 2).contiguous()
+        elif len(context_layer.shape) == 4:
+            context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(*new_context_layer_shape)
-
+        
         return context_layer
 
 class GUTNetSelfOutput(nn.Module):
@@ -184,17 +176,14 @@ class GUTNet(nn.Module):
 
     def forward(self, x):
         print(f"Input shape in GUTNet: {x.shape}")
-        if self.config.network_type == 'without_attention':
-            embedding_output = self.embeddings(x)
-            encoder_outputs = self.encoder(embedding_output.unsqueeze(1))
-            sequence_output = encoder_outputs.squeeze(1)
-        else:
-            embedding_output = self.embeddings(x)
-            encoder_outputs = self.encoder(embedding_output)
-            sequence_output = encoder_outputs
-        
-        print(f"Sequence output shape: {sequence_output.shape}")
-        pooled_output = self.pooler_activation(self.pooler(sequence_output))
+        if len(x.shape) == 2:
+            x = x.unsqueeze(1)  # 添加序列长度维度
+        print(f"Adjusted input shape: {x.shape}")
+        embedding_output = self.embeddings(x)
+        print(f"Embedding output shape: {embedding_output.shape}")
+        encoder_outputs = self.encoder(embedding_output)
+        sequence_output = encoder_outputs
+        pooled_output = self.pooler_activation(self.pooler(sequence_output[:, 0]))
         
         return sequence_output, pooled_output
 
@@ -229,7 +218,7 @@ class GUTNetForSequenceClassification(nn.Module):
         print(f"Input shape in GUTNetForSequenceClassification: {x.shape}")
         outputs = self.gutnet(x)
         
-        sequence_output, pooled_output = outputs
+        pooled_output = outputs[1]
         print(f"Pooled output shape: {pooled_output.shape}")
 
         pooled_output = self.dropout(pooled_output)
@@ -238,14 +227,34 @@ class GUTNetForSequenceClassification(nn.Module):
 
         loss = None
         if labels is not None:
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            if self.config.problem_type is None:
+                if self.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
+
+            if self.config.problem_type == "regression":
+                loss_fct = MSELoss()
+                if self.num_labels == 1:
+                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(logits, labels)
+            elif self.config.problem_type == "single_label_classification":
+                loss_fct = CrossEntropyLoss()
+                # 确保标签是 Long 类型
+                labels = labels.long()
+                loss = loss_fct(logits, labels)
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(logits, labels)
 
         return SequenceClassifierOutput(
             loss=loss,
             logits=logits,
-            hidden_states=sequence_output,
-            attentions=None
+            hidden_states=outputs[0],
+            attentions=None,
         )
 
     def print_model_architecture(self):
@@ -255,7 +264,7 @@ class GUTNetForSequenceClassification(nn.Module):
         logging.info(f"Number of Hidden Layers: {self.config.num_hidden_layers}")
         logging.info(f"Number of Attention Heads: {self.config.num_attention_heads}")
         logging.info(f"Intermediate Size: {self.config.intermediate_size}")
-        logging.info(f"Number of Labels: {self.config.num_labels}")
+        logging.info(f"Number of Classes: {self.config.num_classes}")
         logging.info(f"Problem Type: {self.config.problem_type}")
         logging.info("\nModel Structure:")
         logging.info(self)
@@ -265,14 +274,7 @@ logging.basicConfig(level=logging.INFO)
 
 if __name__ == "__main__":
     # Create configuration
-    config = GUTNetConfig(
-        input_dim=11, 
-        num_labels=5, 
-        problem_type="single_label_classification", 
-        log_level="DEBUG",
-        network_type="with_attention",  # Change this to test different network types
-        seq_len=128
-    )
+    config = GUTNetConfig(input_dim=11, num_classes=5, problem_type="single_label_classification", log_level="DEBUG")
 
     # Initialize model
     model = GUTNetForSequenceClassification(config)
@@ -282,14 +284,10 @@ if __name__ == "__main__":
 
     # Prepare input
     batch_size = 32
-    seq_length = config.seq_len
-    
-    if config.network_type == 'with_attention':
-        x = torch.randn(batch_size, seq_length)
-    else:
-        x = torch.randn(batch_size, config.input_dim)
-    
-    labels = torch.randint(0, config.num_labels, (batch_size,))
+    seq_length = 128
+    input_dim = config.input_dim
+    x = torch.randn(batch_size, seq_length, input_dim)
+    labels = torch.randint(0, config.num_classes, (batch_size,))  # Change this line
 
     # Forward pass
     outputs = model(x, labels=labels)
@@ -300,4 +298,3 @@ if __name__ == "__main__":
 
     print(f"Loss: {loss.item()}")
     print(f"Logits shape: {logits.shape}")
-

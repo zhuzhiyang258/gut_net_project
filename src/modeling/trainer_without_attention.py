@@ -40,7 +40,10 @@ class GUTNetTrainer:
         # Loss function
         self.criterion = CrossEntropyLoss()
 
-    def train(self, num_epochs):
+    def train(self, num_epochs, patience=3):
+        best_val_accuracy = 0
+        epochs_without_improvement = 0
+        
         for epoch in range(num_epochs):
             self.model.train()
             total_loss = 0.0
@@ -48,20 +51,10 @@ class GUTNetTrainer:
             for batch in progress_bar:
                 inputs, labels = batch
                 labels = labels.long()
-                
-                # Debugging information
-                print(f"Labels shape: {labels.shape}")
-                print(f"Labels min: {labels.min().item()}, max: {labels.max().item()}")
-                print(f"Unique labels: {torch.unique(labels)}")
-                
                 inputs, labels = inputs.to(self.device), labels.to(self.device)
                 
                 self.optimizer.zero_grad()
                 outputs = self.model(inputs, labels=labels)
-                
-                # Add this debugging information
-                print(f"Model output logits shape: {outputs.logits.shape}")
-                
                 loss = outputs.loss
                 loss.backward()
                 self.optimizer.step()
@@ -70,11 +63,23 @@ class GUTNetTrainer:
                 progress_bar.set_postfix({'loss': f"{loss.item():.4f}"})
             
             avg_loss = total_loss / len(self.train_loader)
-            logger.info(f"Epoch {epoch+1}/{num_epochs}, Average Loss: {avg_loss:.4f}")
+            logger.info(f"Epoch {epoch+1}/{num_epochs}, 平均损失: {avg_loss:.4f}")
             
-            # 评估验证集
+            # 在验证集上评估
             val_accuracy = self.evaluate(self.val_loader)
-            logger.info(f"Validation Accuracy: {val_accuracy:.4f}")
+            logger.info(f"验证准确率: {val_accuracy:.4f}")
+            
+            # 早停
+            if val_accuracy > best_val_accuracy:
+                best_val_accuracy = val_accuracy
+                epochs_without_improvement = 0
+                # 保存最佳模型
+                torch.save(self.model.state_dict(), 'best_model.pth')
+            else:
+                epochs_without_improvement += 1
+                if epochs_without_improvement >= patience:
+                    logger.info(f"触发早停。最佳验证准确率: {best_val_accuracy:.4f}")
+                    break
 
     def evaluate(self, data_loader):
         self.model.eval()
@@ -91,8 +96,14 @@ class GUTNetTrainer:
                 all_labels.extend(labels.cpu().numpy())
         
         accuracy = accuracy_score(all_labels, all_preds)
-        logger.info("\nClassification Report:")
-        logger.info(classification_report(all_labels, all_preds))
+        logger.info("\n分类报告:")
+        logger.info(classification_report(all_labels, all_preds, zero_division=1))
+        
+        # 添加这些行来打印更详细的信息
+        unique_labels = np.unique(all_labels)
+        unique_preds = np.unique(all_preds)
+        logger.info(f"真实标签中的唯一值: {unique_labels}")
+        logger.info(f"预测标签中的唯一值: {unique_preds}")
         
         return accuracy
 
@@ -117,9 +128,9 @@ if __name__ == "__main__":
     num_classes = 5  # This is correct, keep it as 5
     hidden_size = 256
     num_hidden_layers = 8
-    num_attention_heads = 4
+    num_attention_heads = 2
     intermediate_size = 512
-    hidden_dropout_prob = 0.2
+    hidden_dropout_prob = 0.1
     attention_probs_dropout_prob = 0.1
     batch_size = 256
     network_type = 'without_attention'
@@ -139,19 +150,23 @@ if __name__ == "__main__":
         log_level="INFO"
     )
 
-    # Initialize trainer
+    # 初始化训练器
     trainer = GUTNetTrainer(config, data_path, batch_size=batch_size)
 
-    # Print device information
-    logger.info(f"Using device: {trainer.device}")
+    # 打印设备信息
+    logger.info(f"使用设备: {trainer.device}")
     if trainer.device.type == 'cuda':
         logger.info(f"GPU: {torch.cuda.get_device_name(0)}")
 
-    # Train the model
-    trainer.train(num_epochs=10)
+    # 训练模型
+    trainer.train(num_epochs=50, patience=5)  # 增加了epoch数,添加了patience
 
-    # Evaluate on test set
+    # 加载最佳模型
+    trainer.model.load_state_dict(torch.load('best_model.pth'))
+
+    # 在测试集上评估
     test_accuracy = trainer.evaluate(trainer.test_loader)
-    logger.info(f"Test Accuracy: {test_accuracy:.4f}")
+    logger.info(f"测试准确率: {test_accuracy:.4f}")
+
 
 
