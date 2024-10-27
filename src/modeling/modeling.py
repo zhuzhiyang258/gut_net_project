@@ -21,16 +21,27 @@ class GUTNetConfig:
         self.problem_type = kwargs.get('problem_type', None)
         self.log_level = kwargs.get('log_level', "INFO")
         self.classifier_dropout = kwargs.get('classifier_dropout', None)
+        self.model_type = kwargs.get('model_type', 'without_attention')
+        self.max_variables = kwargs.get('max_variables', 512)  # Renamed from max_position_embeddings
 
 class GUTNetEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.config = config  # Add this line to store the config
+        if config.model_type == 'with_attention':
+            self.variable_embeddings = nn.Embedding(config.max_variables, config.hidden_size)
         self.value_embeddings = nn.Linear(config.input_dim, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, x):
-        embeddings = self.value_embeddings(x)
+        if self.config.model_type == 'with_attention':
+            seq_length = x.size(1)
+            variable_ids = torch.arange(seq_length, dtype=torch.long, device=x.device)
+            variable_embeddings = self.variable_embeddings(variable_ids)
+            embeddings = variable_embeddings.unsqueeze(0) * x.unsqueeze(-1)
+        else:
+            embeddings = self.value_embeddings(x)
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
         return embeddings
@@ -47,6 +58,7 @@ class GUTNetSelfAttention(nn.Module):
         self.value = nn.Linear(config.hidden_size, self.all_head_size)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+        self.debug = True  # Add this line
 
     def transpose_for_scores(self, x):
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
@@ -59,7 +71,9 @@ class GUTNetSelfAttention(nn.Module):
             raise ValueError(f"Unexpected input shape: {x.shape}")
 
     def forward(self, hidden_states):
-        print(f"Hidden states shape in self-attention: {hidden_states.shape}")  # 添加这行用于调试
+        if self.debug:
+            print(f"Hidden states shape in self-attention: {hidden_states.shape}")
+            self.debug = False  # Turn off debug after first forward pass
         query_layer = self.transpose_for_scores(self.query(hidden_states))
         key_layer = self.transpose_for_scores(self.key(hidden_states))
         value_layer = self.transpose_for_scores(self.value(hidden_states))
@@ -161,6 +175,7 @@ class GUTNet(nn.Module):
         self.pooler_activation = nn.Tanh()
         
         self.init_weights()
+        self.debug = True  # Add this line
 
     def init_weights(self):
         self.apply(self._init_weights)
@@ -175,16 +190,23 @@ class GUTNet(nn.Module):
             module.weight.data.fill_(1.0)
 
     def forward(self, x):
-        print(f"Input shape in GUTNet: {x.shape}")
-        if len(x.shape) == 2:
-            x = x.unsqueeze(1)  # 添加序列长度维度
-        print(f"Adjusted input shape: {x.shape}")
+        if self.debug:
+            print(f"Input shape in GUTNet: {x.shape}")
+        if self.config.model_type == 'with_attention':
+            if len(x.shape) != 2:
+                raise ValueError("Input should be 2D (batch_size, seq_len) when model_type is 'with_attention'")
+        else:
+            if len(x.shape) == 2:
+                x = x.unsqueeze(1)
         embedding_output = self.embeddings(x)
-        print(f"Embedding output shape: {embedding_output.shape}")
+        if self.debug:
+            print(f"Embedding output shape: {embedding_output.shape}")
         encoder_outputs = self.encoder(embedding_output)
         sequence_output = encoder_outputs
         pooled_output = self.pooler_activation(self.pooler(sequence_output[:, 0]))
-        
+        if self.debug:
+            print(f"Pooled output shape: {pooled_output.shape}")
+            self.debug = False  # Turn off debug after first forward pass
         return sequence_output, pooled_output
 
 @dataclass
@@ -208,6 +230,7 @@ class GUTNetForSequenceClassification(nn.Module):
         self.classifier = nn.Linear(config.hidden_size, config.num_classes)
 
         self.post_init()
+        self.debug = True  # Add this line
 
     def post_init(self):
         self.classifier.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
@@ -215,15 +238,19 @@ class GUTNetForSequenceClassification(nn.Module):
             self.classifier.bias.data.zero_()
 
     def forward(self, x, labels=None):
-        print(f"Input shape in GUTNetForSequenceClassification: {x.shape}")
+        if self.debug:
+            print(f"Input shape in GUTNetForSequenceClassification: {x.shape}")
         outputs = self.gutnet(x)
         
         pooled_output = outputs[1]
-        print(f"Pooled output shape: {pooled_output.shape}")
+        if self.debug:
+            print(f"Pooled output shape: {pooled_output.shape}")
 
         pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
-        print(f"Logits shape: {logits.shape}")
+        if self.debug:
+            print(f"Logits shape: {logits.shape}")
+            self.debug = False  # Turn off debug after first forward pass
 
         loss = None
         if labels is not None:
@@ -274,7 +301,8 @@ logging.basicConfig(level=logging.INFO)
 
 if __name__ == "__main__":
     # Create configuration
-    config = GUTNetConfig(input_dim=11, num_classes=5, problem_type="single_label_classification", log_level="DEBUG")
+    config = GUTNetConfig(input_dim=1, num_classes=5, problem_type="single_label_classification", 
+                          log_level="DEBUG", model_type="with_attention", max_variables=512)
 
     # Initialize model
     model = GUTNetForSequenceClassification(config)
@@ -284,10 +312,9 @@ if __name__ == "__main__":
 
     # Prepare input
     batch_size = 32
-    seq_length = 128
-    input_dim = config.input_dim
-    x = torch.randn(batch_size, seq_length, input_dim)
-    labels = torch.randint(0, config.num_classes, (batch_size,))  # Change this line
+    seq_length = 11  # This now represents the number of variables
+    x = torch.randn(batch_size, seq_length)  # Each variable has a single value
+    labels = torch.randint(0, config.num_classes, (batch_size,))
 
     # Forward pass
     outputs = model(x, labels=labels)

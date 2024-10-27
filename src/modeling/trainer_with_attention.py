@@ -17,7 +17,7 @@ from tqdm import tqdm
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-class GUTNetTrainerWithAttention:
+class GUTNetTrainer:
     def __init__(self, config, data_path, batch_size=32):
         self.config = config
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -27,20 +27,24 @@ class GUTNetTrainerWithAttention:
         data_processor = preprocess_data(root_data_path=data_path, batch_size=batch_size)
         self.train_loader, self.val_loader, self.test_loader = data_processor.get_dataloader()
         
-        # Add this debugging code
+        # Debugging code
         for i, (inputs, labels) in enumerate(self.train_loader):
-            print(f"Batch {i} - Input shape: {inputs.shape}, Labels shape: {labels.shape}")
-            print(f"Batch {i} - Labels min: {labels.min().item()}, max: {labels.max().item()}")
-            print(f"Batch {i} - Unique labels: {torch.unique(labels)}")
-            if i == 2:  # Print info for first 3 batches only
-                break
+            if i == 0:
+                logger.info(f"First batch - Input shape: {inputs.shape}, Labels shape: {labels.shape}")
+                logger.info(f"First batch - Labels min: {labels.min().item()}, max: {labels.max().item()}")
+                logger.info(f"First batch - Unique labels: {torch.unique(labels)}")
+            break
         
         # Optimizer
-        self.optimizer = AdamW(self.model.parameters(), lr=1e-4)
+        self.optimizer = AdamW(self.model.parameters(), lr=1e-3)
         # Loss function
         self.criterion = CrossEntropyLoss()
+        self.debug = True
 
-    def train(self, num_epochs):
+    def train(self, num_epochs, patience=3):
+        best_val_accuracy = 0
+        epochs_without_improvement = 0
+        
         for epoch in range(num_epochs):
             self.model.train()
             total_loss = 0.0
@@ -48,33 +52,35 @@ class GUTNetTrainerWithAttention:
             for batch in progress_bar:
                 inputs, labels = batch
                 labels = labels.long()
-                
-                # Debugging information
-                print(f"Labels shape: {labels.shape}")
-                print(f"Labels min: {labels.min().item()}, max: {labels.max().item()}")
-                print(f"Unique labels: {torch.unique(labels)}")
-                
                 inputs, labels = inputs.to(self.device), labels.to(self.device)
                 
                 self.optimizer.zero_grad()
                 outputs = self.model(inputs, labels=labels)
-                
-                # Add this debugging information
-                print(f"Model output logits shape: {outputs.logits.shape}")
-                
                 loss = outputs.loss
                 loss.backward()
                 self.optimizer.step()
                 total_loss += loss.item()
                 
-                progress_bar.set_postfix({'loss': f"{loss.item():.4f}"})
+                progress_bar.update(1)
+                if self.debug:
+                    self.debug = False
+                    break
             
             avg_loss = total_loss / len(self.train_loader)
-            logger.info(f"Epoch {epoch+1}/{num_epochs}, Average Loss: {avg_loss:.4f}")
             
-            # Evaluate on validation set
             val_accuracy = self.evaluate(self.val_loader)
-            logger.info(f"Validation Accuracy: {val_accuracy:.4f}")
+            
+            logger.info(f"Epoch {epoch+1}/{num_epochs}, Average Loss: {avg_loss:.4f}, Validation Accuracy: {val_accuracy:.4f}")
+            
+            if val_accuracy > best_val_accuracy:
+                best_val_accuracy = val_accuracy
+                epochs_without_improvement = 0
+                torch.save(self.model.state_dict(), 'best_model_with_attention.pth')
+            else:
+                epochs_without_improvement += 1
+                if epochs_without_improvement >= patience:
+                    logger.info(f"Early stopping triggered. Best validation accuracy: {best_val_accuracy:.4f}")
+                    break
 
     def evaluate(self, data_loader):
         self.model.eval()
@@ -91,9 +97,6 @@ class GUTNetTrainerWithAttention:
                 all_labels.extend(labels.cpu().numpy())
         
         accuracy = accuracy_score(all_labels, all_preds)
-        logger.info("\nClassification Report:")
-        logger.info(classification_report(all_labels, all_preds))
-        
         return accuracy
 
     def predict(self, test_loader):
@@ -113,17 +116,16 @@ class GUTNetTrainerWithAttention:
 if __name__ == "__main__":
     # Example usage
     data_path = 'data/standardized'
-    input_dim = 11  # This should match your actual input dimension
-    num_classes = 4  # This should match your actual number of classes
+    input_dim = 1  # Changed to 1 as each variable now has a single value
+    num_classes = 5
     hidden_size = 256
-    num_hidden_layers = 6
+    num_hidden_layers = 8
     num_attention_heads = 4
     intermediate_size = 512
-    hidden_dropout_prob = 0.2
+    hidden_dropout_prob = 0.1
     attention_probs_dropout_prob = 0.1
-    batch_size = 128
-    network_type = 'with_attention'
-    seq_len = 11  # This should match your actual sequence length
+    batch_size = 256
+    max_variables = 11  # This should match the number of variables in your data
 
     # Create configuration
     config = GUTNetConfig(
@@ -137,21 +139,25 @@ if __name__ == "__main__":
         attention_probs_dropout_prob=attention_probs_dropout_prob,
         problem_type="single_label_classification",
         log_level="INFO",
-        network_type=network_type,
-        seq_len=seq_len
+        model_type="with_attention",
+        max_variables=max_variables
     )
 
     # Initialize trainer
-    trainer = GUTNetTrainerWithAttention(config, data_path, batch_size=batch_size)
+    trainer = GUTNetTrainer(config, data_path, batch_size=batch_size)
 
     # Print device information
     logger.info(f"Using device: {trainer.device}")
     if trainer.device.type == 'cuda':
         logger.info(f"GPU: {torch.cuda.get_device_name(0)}")
 
-    # Train the model
-    trainer.train(num_epochs=10)
+    # Train model
+    trainer.train(num_epochs=50, patience=5)
+
+    # Load best model
+    trainer.model.load_state_dict(torch.load('best_model_with_attention.pth', map_location=trainer.device))
 
     # Evaluate on test set
     test_accuracy = trainer.evaluate(trainer.test_loader)
-    logger.info(f"Test Accuracy: {test_accuracy:.4f}")
+    logger.info(f"Test accuracy: {test_accuracy:.4f}")
+

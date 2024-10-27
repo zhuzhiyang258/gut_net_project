@@ -39,6 +39,7 @@ class GUTNetTrainer:
         self.optimizer = AdamW(self.model.parameters(), lr=1e-3)
         # Loss function
         self.criterion = CrossEntropyLoss()
+        self.debug = True  # Add this line
 
     def train(self, num_epochs, patience=3):
         best_val_accuracy = 0
@@ -61,24 +62,24 @@ class GUTNetTrainer:
                 total_loss += loss.item()
                 
                 progress_bar.set_postfix({'loss': f"{loss.item():.4f}"})
+                if self.debug:
+                    self.debug = False  # Turn off debug after first batch
+                    break  # Exit after first batch in debug mode
             
             avg_loss = total_loss / len(self.train_loader)
-            logger.info(f"Epoch {epoch+1}/{num_epochs}, 平均损失: {avg_loss:.4f}")
-            
-            # 在验证集上评估
             val_accuracy = self.evaluate(self.val_loader)
-            logger.info(f"验证准确率: {val_accuracy:.4f}")
             
-            # 早停
+            logger.info(f"Epoch {epoch+1}/{num_epochs}, Average Loss: {avg_loss:.4f}, Validation Accuracy: {val_accuracy:.4f}")
+            
+            # Early stopping logic
             if val_accuracy > best_val_accuracy:
                 best_val_accuracy = val_accuracy
                 epochs_without_improvement = 0
-                # 保存最佳模型
                 torch.save(self.model.state_dict(), 'best_model.pth')
             else:
                 epochs_without_improvement += 1
                 if epochs_without_improvement >= patience:
-                    logger.info(f"触发早停。最佳验证准确率: {best_val_accuracy:.4f}")
+                    logger.info(f"Early stopping triggered. Best validation accuracy: {best_val_accuracy:.4f}")
                     break
 
     def evaluate(self, data_loader):
@@ -96,15 +97,6 @@ class GUTNetTrainer:
                 all_labels.extend(labels.cpu().numpy())
         
         accuracy = accuracy_score(all_labels, all_preds)
-        logger.info("\n分类报告:")
-        logger.info(classification_report(all_labels, all_preds, zero_division=1))
-        
-        # 添加这些行来打印更详细的信息
-        unique_labels = np.unique(all_labels)
-        unique_preds = np.unique(all_preds)
-        logger.info(f"真实标签中的唯一值: {unique_labels}")
-        logger.info(f"预测标签中的唯一值: {unique_preds}")
-        
         return accuracy
 
     def predict(self, test_loader):
@@ -153,13 +145,8 @@ if __name__ == "__main__":
     # 初始化训练器
     trainer = GUTNetTrainer(config, data_path, batch_size=batch_size)
 
-    # 打印设备信息
-    logger.info(f"使用设备: {trainer.device}")
-    if trainer.device.type == 'cuda':
-        logger.info(f"GPU: {torch.cuda.get_device_name(0)}")
-
     # 训练模型
-    trainer.train(num_epochs=50, patience=5)  # 增加了epoch数,添加了patience
+    trainer.train(num_epochs=50, patience=5)
 
     # 加载最佳模型
     trainer.model.load_state_dict(torch.load('best_model.pth'))
