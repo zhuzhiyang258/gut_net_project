@@ -12,13 +12,14 @@ from sklearn.metrics import accuracy_score, classification_report
 import logging
 from src.data_processing.dataset_builder import preprocess_data  # Updated import statement
 from tqdm import tqdm
+import optuna
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class GUTNetTrainer:
-    def __init__(self, config, data_path, batch_size=32):
+    def __init__(self, config, data_path, batch_size=32, lr=1e-3):
         self.config = config
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         print(f"Using device: {self.device}")
@@ -36,12 +37,11 @@ class GUTNetTrainer:
                 break
         
         # Optimizer
-        self.optimizer = AdamW(self.model.parameters(), lr=1e-3)
+        self.optimizer = AdamW(self.model.parameters(), lr=lr)
         # Loss function
         self.criterion = CrossEntropyLoss()
-        self.debug = True  # Add this line
 
-    def train(self, num_epochs, patience=3):
+    def train(self, num_epochs, patience):
         best_val_accuracy = 0
         epochs_without_improvement = 0
         
@@ -62,16 +62,12 @@ class GUTNetTrainer:
                 total_loss += loss.item()
                 
                 progress_bar.set_postfix({'loss': f"{loss.item():.4f}"})
-                if self.debug:
-                    self.debug = False  # Turn off debug after first batch
-                    break  # Exit after first batch in debug mode
             
             avg_loss = total_loss / len(self.train_loader)
             val_accuracy = self.evaluate(self.val_loader)
             
             logger.info(f"Epoch {epoch+1}/{num_epochs}, Average Loss: {avg_loss:.4f}, Validation Accuracy: {val_accuracy:.4f}")
             
-            # Early stopping logic
             if val_accuracy > best_val_accuracy:
                 best_val_accuracy = val_accuracy
                 epochs_without_improvement = 0
@@ -81,6 +77,14 @@ class GUTNetTrainer:
                 if epochs_without_improvement >= patience:
                     logger.info(f"Early stopping triggered. Best validation accuracy: {best_val_accuracy:.4f}")
                     break
+        
+        final_accuracy, final_report = self.generate_evaluation_report(self.test_loader)
+        logger.info("\n最终测试集评估结果:")
+        logger.info(f"准确率: {final_accuracy:.4f}")
+        logger.info("详细分类报告:")
+        logger.info(f"\n{final_report}")
+        
+        return best_val_accuracy
 
     def evaluate(self, data_loader):
         self.model.eval()
@@ -99,6 +103,25 @@ class GUTNetTrainer:
         accuracy = accuracy_score(all_labels, all_preds)
         return accuracy
 
+    def generate_evaluation_report(self, data_loader):
+        self.model.eval()
+        all_preds = []
+        all_labels = []
+        
+        with torch.no_grad():
+            for batch in data_loader:
+                inputs, labels = [b.to(self.device) for b in batch]
+                outputs = self.model(inputs)
+                logits = outputs.logits
+                preds = torch.argmax(logits, dim=1).cpu().numpy()
+                all_preds.extend(preds)
+                all_labels.extend(labels.cpu().numpy())
+        
+        accuracy = accuracy_score(all_labels, all_preds)
+        report = classification_report(all_labels, all_preds, target_names=['Class 0', 'Class 1', 'Class 2', 'Class 3'])
+        
+        return accuracy, report
+
     def predict(self, test_loader):
         self.model.eval()
         all_preds = []
@@ -113,17 +136,48 @@ class GUTNetTrainer:
         
         return np.array(all_preds)
 
+    def objective(self, trial):
+        # Define hyperparameters to optimize
+        config = GUTNetConfig(
+            input_dim=11,
+            num_classes=5,
+            hidden_size=trial.suggest_int('hidden_size', 64, 256),
+            num_hidden_layers=trial.suggest_int('num_hidden_layers', 2, 12),
+            num_attention_heads=1,
+            intermediate_size=trial.suggest_int('intermediate_size', 128, 1024),
+            hidden_dropout_prob=trial.suggest_float('hidden_dropout_prob', 0.0, 0.5),
+            attention_probs_dropout_prob=trial.suggest_float('attention_probs_dropout_prob', 0.0, 0.5),
+            problem_type="single_label_classification",
+            log_level="INFO"
+        )
+
+        lr = trial.suggest_loguniform('lr', 1e-5, 1e-2)
+        batch_size = trial.suggest_categorical('batch_size', [32, 64, 128, 256])
+
+        # Reinitialize the model and optimizer with new hyperparameters
+        self.model = GUTNetForSequenceClassification(config).to(self.device)
+        self.optimizer = AdamW(self.model.parameters(), lr=lr)
+
+        # Prepare datasets using preprocess_data
+        data_processor = preprocess_data(root_data_path=self.data_path, batch_size=batch_size)
+        self.train_loader, self.val_loader, self.test_loader = data_processor.get_dataloader()
+
+        # Train the model
+        best_val_accuracy = self.train(num_epochs=20, patience=5)
+
+        return best_val_accuracy
+
 if __name__ == "__main__":
     # Example usage
     data_path = 'data/standardized'
     input_dim = 11  # This is correct as your input shape is [128, 11]
     num_classes = 5  # This is correct, keep it as 5
-    hidden_size = 256
-    num_hidden_layers = 8
-    num_attention_heads = 2
-    intermediate_size = 512
+    hidden_size = 258
+    num_hidden_layers = 6
+    num_attention_heads = 1
+    intermediate_size = 1024
     hidden_dropout_prob = 0.1
-    attention_probs_dropout_prob = 0.1
+    attention_probs_dropout_prob = 0.3
     batch_size = 256
     network_type = 'without_attention'
 
@@ -154,6 +208,8 @@ if __name__ == "__main__":
     # 在测试集上评估
     test_accuracy = trainer.evaluate(trainer.test_loader)
     logger.info(f"测试准确率: {test_accuracy:.4f}")
+
+
 
 
 
