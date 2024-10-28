@@ -79,22 +79,14 @@ class preprocess_data:
 
 
     @staticmethod
-    def create_weighted_sampler(labels: torch.tensor, target_ratio: float = 2.0) -> WeightedRandomSampler:
+    def create_weighted_sampler(labels: torch.tensor) -> WeightedRandomSampler:
         class_counts = torch.bincount(labels)
-        target_counts = class_counts.clone()
-        
-        # 设置目标样本数，将少数类的样本数增加到多数类的 1/target_ratio
-        max_count = class_counts.max().item()
-        for i in range(len(target_counts)):
-            if class_counts[i] < max_count / target_ratio:
-                target_counts[i] = int(max_count / target_ratio)
-        
-        weights = target_counts.float() / class_counts.float()
+        weights = 1. / class_counts.float()
         sample_weights = weights[labels]
 
         sampler = WeightedRandomSampler(
             weights=sample_weights,
-            num_samples=int(target_counts.sum().item()),
+            num_samples=len(labels),
             replacement=True
         )
         return sampler
@@ -164,9 +156,9 @@ class preprocess_data:
         test_sampler = preprocess_data.create_weighted_sampler(torch.tensor([y for _, y in test_dataset]))
 
         if not self.batch_size:
-            train_batch_size = len(train_sampler)
-            valid_batch_size = len(valid_sampler)
-            test_batch_size = len(test_sampler)
+            train_batch_size = len(train_dataset)
+            valid_batch_size = len(valid_dataset)
+            test_batch_size = len(test_dataset)
         else:
             train_batch_size = valid_batch_size = test_batch_size = self.batch_size
         
@@ -229,44 +221,48 @@ class preprocess_data:
         print(f"{'Valid':<10}{sum(valid_counts.values()):<10}")
         print(f"{'Test':<10}{sum(test_counts.values()):<10}")
 
+def get_one(dataloader):
+    return next(iter(dataloader))
+
 if __name__ == '__main__':
-    print('test with root_data_path and train path')
-    train_dataloader, valid_dataloader, test_dataloader = preprocess_data(root_data_path='data/standardized', train_path='data/standardized').get_dataloader()
-    for x,y in train_dataloader:
-        print(x.shape)
-        print(y.shape)
+    # print('test with root_data_path and train path')
+    # train_dataloader, valid_dataloader, test_dataloader = preprocess_data(root_data_path='data/standardized', train_path='data/standardized').get_dataloader()
+    # for x,y in train_dataloader:
+    #     print(x.shape)
+    #     print(y.shape)
     print('test without train_path only with root_data_path')
     train_dataloader, valid_dataloder, test_dataloader = preprocess_data(root_data_path='data/standardized').get_dataloader()
     for x,y in train_dataloader:
         print(x.shape)
         print(y.shape)
-        
-    print("\nTrain dataset label counts after balancing:")
-    train_label_counts = {}
-    for _, y in train_dataloader:
-        for label in y:
-            label = label.item()
-            if label not in train_label_counts:
-                train_label_counts[label] = 0
-            train_label_counts[label] += 1
-    print(train_label_counts)
+    print(len(train_dataloader.dataset))
+
+    # print("\nTrain dataset label counts after balancing:")
+    # train_label_counts = {}
+    # for _, y in train_dataloader:
+    #     for label in y:
+    #         label = label.item()
+    #         if label not in train_label_counts:
+    #             train_label_counts[label] = 0
+    #         train_label_counts[label] += 1
+    # print(train_label_counts)
     
-    print("\nValidation dataset label counts after balancing:")
-    valid_label_counts = {}
-    for _, y in valid_dataloader:
-        for label in y:
-            label = label.item()
-            if label not in valid_label_counts:
-                valid_label_counts[label] = 0
-            valid_label_counts[label] += 1
-    print(valid_label_counts)
+    # print("\nValidation dataset label counts after balancing:")
+    # valid_label_counts = {}
+    # for _, y in valid_dataloader:
+    #     for label in y:
+    #         label = label.item()
+    #         if label not in valid_label_counts:
+    #             valid_label_counts[label] = 0
+    #         valid_label_counts[label] += 1
+    # print(valid_label_counts)
     
-    print("\nTest dataset label counts after balancing:")
-    test_label_counts = {}
-    for _, y in test_dataloader:
-        for label in y:
-            label = label.item()
-            if label not in test_label_counts:
-                test_label_counts[label] = 0
-            test_label_counts[label] += 1
-    print(test_label_counts)
+    # print("\nTest dataset label counts after balancing:")
+    # test_label_counts = {}
+    # for _, y in test_dataloader:
+    #     for label in y:
+    #         label = label.item()
+    #         if label not in test_label_counts:
+    #             test_label_counts[label] = 0
+    #         test_label_counts[label] += 1
+    # print(test_label_counts)
