@@ -174,6 +174,30 @@ class preprocess_data:
         valid_dataloader = DataLoader(dataset=valid_dataset, batch_size=valid_batch_size, sampler=valid_sampler)
         test_dataloader = DataLoader(dataset=test_dataset, batch_size=test_batch_size, sampler=test_sampler)
 
+        # Check for overlap between datasets
+        train_indices = set(train_dataset.indices if hasattr(train_dataset, 'indices') else range(len(train_dataset)))
+        valid_indices = set(valid_dataset.indices if hasattr(valid_dataset, 'indices') else range(len(valid_dataset)))
+        test_indices = set(test_dataset.indices if hasattr(test_dataset, 'indices') else range(len(test_dataset)))
+
+        train_valid_overlap = train_indices.intersection(valid_indices)
+        train_test_overlap = train_indices.intersection(test_indices)
+        valid_test_overlap = valid_indices.intersection(test_indices)
+
+        if train_valid_overlap:
+            print(f"Overlap between train and valid datasets: {train_valid_overlap}")
+        else:
+            print("No overlap between train and valid datasets.")
+
+        if train_test_overlap:
+            print(f"Overlap between train and test datasets: {train_test_overlap}")
+        else:
+            print("No overlap between train and test datasets.")
+
+        if valid_test_overlap:
+            print(f"Overlap between valid and test datasets: {valid_test_overlap}")
+        else:
+            print("No overlap between valid and test datasets.")
+
         self.print_label_distribution(train_dataset, valid_dataset, test_dataset)
 
         return train_dataloader, valid_dataloader, test_dataloader

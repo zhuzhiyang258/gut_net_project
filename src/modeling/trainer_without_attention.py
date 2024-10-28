@@ -174,7 +174,7 @@ if __name__ == "__main__":
     num_classes = 5  # This is correct, keep it as 5
     hidden_size = 258
     num_hidden_layers = 6
-    num_attention_heads = 1
+    num_attention_heads = 2
     intermediate_size = 1024
     hidden_dropout_prob = 0.1
     attention_probs_dropout_prob = 0.3
@@ -208,6 +208,22 @@ if __name__ == "__main__":
     # 在测试集上评估
     test_accuracy = trainer.evaluate(trainer.test_loader)
     logger.info(f"测试准确率: {test_accuracy:.4f}")
+
+    # 在验证集上评估
+    val_accuracy = trainer.evaluate(trainer.val_loader)
+    logger.info(f"验证准确率: {val_accuracy:.4f}")
+
+    # 生成详细的评估报告
+    test_accuracy, test_report = trainer.generate_evaluation_report(trainer.test_loader)
+    val_accuracy, val_report = trainer.generate_evaluation_report(trainer.val_loader)
+
+    logger.info("\n测试集详细评估报告:")
+    logger.info(f"准确率: {test_accuracy:.4f}")
+    logger.info(f"分类报告:\n{test_report}")
+
+    logger.info("\n验证集详细评估报告:")
+    logger.info(f"准确率: {val_accuracy:.4f}")
+    logger.info(f"分类报告:\n{val_report}")
 
 
 
