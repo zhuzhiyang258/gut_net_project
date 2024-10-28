@@ -10,7 +10,7 @@ from .modeling import GUTNetConfig, GUTNetForSequenceClassification
 import numpy as np
 from sklearn.metrics import accuracy_score, classification_report
 import logging
-from src.data_processing.dataset_builder import preprocess_data  # Updated import statement
+from src.data_processing.dataset_builder import preprocess_data, get_one  # Updated import statement
 from tqdm import tqdm
 import optuna
 
@@ -58,9 +58,9 @@ class GUTNetTrainer:
             train_correct = 0
             train_total = 0
             
-            progress_bar = tqdm(self.train_loader, desc=f"Epoch {epoch+1}/{num_epochs}")
+            progress_bar = tqdm(range(num_epochs), desc=f"Epoch {epoch+1}/{num_epochs}")
             for batch in progress_bar:
-                inputs, labels = batch
+                inputs, labels = get_one(self.train_loader)
                 labels = labels.long()
                 inputs, labels = inputs.to(self.device), labels.to(self.device)
                 
