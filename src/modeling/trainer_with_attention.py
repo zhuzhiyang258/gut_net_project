@@ -1,12 +1,12 @@
-import sys
-import os
-# Add the project root directory to Python path
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-sys.path.insert(0, project_root)
+# import sys
+# import os
+# # # Add the project root directory to Python path
+# # project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+# # sys.path.insert(0, project_root)
 import torch
 from torch.optim import AdamW
 from torch.nn import CrossEntropyLoss
-from modeling import GUTNetConfig, GUTNetForSequenceClassification
+from .modeling import GUTNetConfig, GUTNetForSequenceClassification
 import numpy as np
 from sklearn.metrics import accuracy_score, classification_report
 import logging
@@ -113,51 +113,51 @@ class GUTNetTrainer:
         
         return np.array(all_preds)
 
-if __name__ == "__main__":
-    # Example usage
-    data_path = 'data/standardized'
-    input_dim = 1  # Changed to 1 as each variable now has a single value
-    num_classes = 5
-    hidden_size = 256
-    num_hidden_layers = 8
-    num_attention_heads = 4
-    intermediate_size = 512
-    hidden_dropout_prob = 0.1
-    attention_probs_dropout_prob = 0.1
-    batch_size = 256
-    max_variables = 11  # This should match the number of variables in your data
+# if __name__ == "__main__":
+#     # Example usage
+#     data_path = 'data/standardized'
+#     input_dim = 1  # Changed to 1 as each variable now has a single value
+#     num_classes = 5
+#     hidden_size = 256
+#     num_hidden_layers = 8
+#     num_attention_heads = 4
+#     intermediate_size = 512
+#     hidden_dropout_prob = 0.1
+#     attention_probs_dropout_prob = 0.1
+#     batch_size = 256
+#     max_variables = 11  # This should match the number of variables in your data
 
-    # Create configuration
-    config = GUTNetConfig(
-        input_dim=input_dim,
-        num_classes=num_classes, 
-        hidden_size=hidden_size,
-        num_hidden_layers=num_hidden_layers,
-        num_attention_heads=num_attention_heads,
-        intermediate_size=intermediate_size,
-        hidden_dropout_prob=hidden_dropout_prob,
-        attention_probs_dropout_prob=attention_probs_dropout_prob,
-        problem_type="single_label_classification",
-        log_level="INFO",
-        model_type="with_attention",
-        max_variables=max_variables
-    )
+#     # Create configuration
+#     config = GUTNetConfig(
+#         input_dim=input_dim,
+#         num_classes=num_classes, 
+#         hidden_size=hidden_size,
+#         num_hidden_layers=num_hidden_layers,
+#         num_attention_heads=num_attention_heads,
+#         intermediate_size=intermediate_size,
+#         hidden_dropout_prob=hidden_dropout_prob,
+#         attention_probs_dropout_prob=attention_probs_dropout_prob,
+#         problem_type="single_label_classification",
+#         log_level="INFO",
+#         model_type="with_attention",
+#         max_variables=max_variables
+#     )
 
-    # Initialize trainer
-    trainer = GUTNetTrainer(config, data_path, batch_size=batch_size)
+#     # Initialize trainer
+#     trainer = GUTNetTrainer(config, data_path, batch_size=batch_size)
 
-    # Print device information
-    logger.info(f"Using device: {trainer.device}")
-    if trainer.device.type == 'cuda':
-        logger.info(f"GPU: {torch.cuda.get_device_name(0)}")
+#     # Print device information
+#     logger.info(f"Using device: {trainer.device}")
+#     if trainer.device.type == 'cuda':
+#         logger.info(f"GPU: {torch.cuda.get_device_name(0)}")
 
-    # Train model
-    trainer.train(num_epochs=50, patience=5)
+#     # Train model
+#     trainer.train(num_epochs=50, patience=5)
 
-    # Load best model
-    trainer.model.load_state_dict(torch.load('best_model_with_attention.pth', map_location=trainer.device))
+#     # Load best model
+#     trainer.model.load_state_dict(torch.load('best_model_with_attention.pth', map_location=trainer.device))
 
-    # Evaluate on test set
-    test_accuracy = trainer.evaluate(trainer.test_loader)
-    logger.info(f"Test accuracy: {test_accuracy:.4f}")
+#     # Evaluate on test set
+#     test_accuracy = trainer.evaluate(trainer.test_loader)
+#     logger.info(f"Test accuracy: {test_accuracy:.4f}")
 
