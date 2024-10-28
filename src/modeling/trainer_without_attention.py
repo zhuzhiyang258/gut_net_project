@@ -19,7 +19,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class GUTNetTrainer:
-    def __init__(self, config, data_path, batch_size=32, lr=1e-3):
+    def __init__(self, config, data_path, batch_size=32, lr=1e-4):
         self.config = config
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         print(f"Using device: {self.device}")
@@ -170,15 +170,15 @@ class GUTNetTrainer:
 if __name__ == "__main__":
     # Example usage
     data_path = 'data/standardized'
-    input_dim = 11  # This is correct as your input shape is [128, 11]
-    num_classes = 5  # This is correct, keep it as 5
-    hidden_size = 258
+    input_dim = 11  
+    num_classes = 5 
+    hidden_size = 168
     num_hidden_layers = 6
     num_attention_heads = 2
     intermediate_size = 1024
     hidden_dropout_prob = 0.1
     attention_probs_dropout_prob = 0.3
-    batch_size = 256
+    batch_size = 512
     network_type = 'without_attention'
 
 
@@ -200,7 +200,7 @@ if __name__ == "__main__":
     trainer = GUTNetTrainer(config, data_path, batch_size=batch_size)
 
     # 训练模型
-    trainer.train(num_epochs=50, patience=5)
+    trainer.train(num_epochs=1000, patience=50)
 
     # 加载最佳模型
     trainer.model.load_state_dict(torch.load('best_model.pth'))

@@ -56,6 +56,10 @@ class preprocess_data:
         def make_num_label(df, label):
             array = df[label].unique()
             index_array = np.arange(array.shape[0])
+            if label == 'label':
+                print("\nClass to label mapping:")
+                for i, class_name in enumerate(array):
+                    print(f"Class '{class_name}' -> Label {i}")
             return df[label].apply(lambda x : index_array[array == x][0] if x in array else index_array.shape[0])
 
         all_label_data = all_label_data.drop(['loaded_uid', 'host_age', 'BMI'], axis = 1).reset_index(drop=True)
